@@ -3,3 +3,4 @@
 *.depend
 *.layout
 out.txt
+build/

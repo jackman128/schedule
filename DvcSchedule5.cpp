@@ -11,12 +11,11 @@ using namespace std;
 #include <cstring>
 #include "DynamicArray.h"
 
-const string fileName = "half.txt";
+const string fileName = "dvc-schedule.txt";
 
 struct Course
 {
-  string term, course, instructor, whenWhere, subjectCode;
-  short section;
+  short term, section;
 };
 
 struct CodeSectionPair
@@ -28,10 +27,12 @@ struct CodeSectionPair
 struct SectionsForTerm
 {
   int sectionsSeen = 0;
-  DynamicArray<short> seenSectionNumber;
+  DynamicArray<Course> seenSectionNumber = DynamicArray<Course>(8);
 };
 
-unsigned termToIndex(const string &str);
+short termToShort(char *str);
+
+const int NUM_BUCKETS = 256;
 
 int main()
 {
@@ -51,64 +52,56 @@ int main()
   if (!fin.good()) throw "I/O error";
 
   //'courses' will hold all of the courses that have been processed so far
-  DynamicArray<Course> courses(100000);
   //subjectCodes will hold the subject codes seen so far
   //and the number of courses for each subject.
-  DynamicArray<CodeSectionPair> subjectCodes(200);
+  //CodeSectionPair subjectCodes[200];
 
-  DynamicArray<SectionsForTerm> alreadySeen(200);
+  SectionsForTerm seen[NUM_BUCKETS];
+
+  hash<int> hasher;
 
   int numSubjectCodes = 0;
   int numCourses = 0;
   int duplicates= 0;
+  string line;
+  getline(fin, line);
   while (fin.good()) {
+    Course c;
     // read the line
-    string line;
     getline(fin, line);
     strcpy(buf, line.c_str());
 
     if (buf[0] == 0) continue; // skip blank lines
 
     //parse the line
-    string term(token = strtok(buf, tab));
-    string section((token = strtok(0, tab)) ? token : "");
-    string course((token = strtok(0, tab)) ? token : "");
-    string instructor((token = strtok(0, tab)) ? token : "");
-    string whenWhere((token = strtok(0, tab)) ? token : "");
-    if (course.find('-') == string::npos) continue; // invalid line: no dash in course name
-    string subjectCode(course.begin(), course.begin() + course.find('-'));
-
-    //'c' is the current course we are looking at
-    Course c;
-    c.term = term;
-    c.section = static_cast<short>(atoi(section.c_str()));
-    c.course = course;
-    c.instructor = instructor;
-    c.whenWhere = whenWhere;
-    c.subjectCode = subjectCode;
+    c.term = termToShort(token = strtok(buf, tab));
+    c.section = atoi((token = strtok(0, tab)) ? token : "");
+    //string course((token = strtok(0, tab)) ? token : "");
+    //string instructor((token = strtok(0, tab)) ? token : "");
+    //string whenWhere((token = strtok(0, tab)) ? token : "");
+    //if (course.find('-') == string::npos) continue; // invalid line: no dash in course name
+    //string subjectCode(course.begin(), course.begin() + course.find('-'));
 
     //Dedup
     bool isDup = false;
-    unsigned hash = termToIndex(term + section);
-    for (int i = 0; i < alreadySeen[hash].sectionsSeen; i++) {
-      if (alreadySeen[hash].seenSectionNumber[i] == c.section) {
+    unsigned hash = hasher(c.section + c.term) % NUM_BUCKETS;
+    for (int i = 0; i < seen[hash].sectionsSeen; i++) {
+      if (c.term == seen[hash].seenSectionNumber[i].term && c.section == seen[hash].seenSectionNumber[i].section) {
         isDup = true;
+        duplicates++;
         break;
       }
     }
-    if (isDup) {
-      duplicates++;
-      continue;
+    if (!isDup) {
+      seen[hash].seenSectionNumber[seen[hash].sectionsSeen++] = c;
     }
-    int ind = alreadySeen[hash].sectionsSeen++;
-    alreadySeen[hash].seenSectionNumber[ind] = c.section;
-
+    /*
     //count
     //If a new subject code is found, add it to subjectCodes
     //and increment numSubjectCodes
     int j = 0;
     for (; j < numSubjectCodes; j++) {
-      if (subjectCodes[j].subjectCode == c.subjectCode) {
+      if (subjectCodes[j].subjectCode == subjectCode) {
         //subject code for this course matches an existing subject code
         subjectCodes[j].numSections++;
         break;
@@ -116,23 +109,18 @@ int main()
     }
     //if the end of the previous loop was reached, then this is a new subject code.
     if (j == numSubjectCodes) {
-      subjectCodes[j].subjectCode = c.subjectCode;
+      subjectCodes[j].subjectCode = subjectCode;
       subjectCodes[j].numSections++;
       numSubjectCodes++;
     }
     //add this course to the courses array and increment the number of courses.
-    courses[numCourses] = c;
     numCourses++;
-
-    //progress bar
-    if (numCourses % 1000 == 0) {
-      cerr << '.';
-      cerr.flush( );
-    }
+    */
   }
   fin.close();
 
   //insertion sort subjectCodes by subjectCode in alphabetical order
+  /*
   int i = 1;
   while (i < numSubjectCodes) {
     CodeSectionPair t = subjectCodes[i];
@@ -147,33 +135,41 @@ int main()
 
   //Now print out the number of subject codes, the array of subject codes
   //along with the number of sections
-  cout << endl << endl;
+  cout << endl;
   cout << "Subject codes: " << numSubjectCodes << endl;
   for (int i = 0; i < numSubjectCodes; i++) {
     cout << subjectCodes[i].subjectCode <<": " << subjectCodes[i].numSections << endl;
   }
   cout << endl;
+  */
   cout << "Duplicates: " << duplicates << endl;
 
   return 0;
 }
 
-unsigned termToIndex(const string &str)
+short termToShort(char *str)
 {
-  static hash<string> hasher;
-  return hasher(str) % 512;
   /*
-  string seasonStr = str.substr(0, str.find(" "));
-  string yearStr = str.substr(str.find(" "));
+  const char* const space = " ";
+  char  *tok;
+  char *seasonStr = (tok = strtok(str, space));
+  int year = atoi(tok);
 
   int seasonNum;
-  if (seasonStr == "Fall")
+  if (seasonStr[1] == 'a')
     seasonNum = 0;
-  else if (seasonStr == "Spring")
+  else if (seasonStr[1] == 'p')
     seasonNum = 1;
   else
     seasonNum = 2;
-
-  return stoi(yearStr) * 3 - 6003 + seasonNum;
+  return year * 3 - 6003 + seasonNum;
   */
+
+  if (str[1] == 'a')
+    return atoi(str + 5) * 3 - 6003;
+  else if (str[1] == 'p')
+    return atoi(str + 7) * 3 - 6002;
+  else
+    return atoi(str + 7) * 3 - 6001;
+
 }
